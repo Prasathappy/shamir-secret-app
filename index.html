@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Secret Reconstructor (Shamir-style)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="style.css" />
+  <!-- Chart.js for quick visualization -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Secret Reconstructor</h1>
+      <p class="sub">Upload JSON → reconstruct secret (constant term) → flag wrong shares</p>
+    </header>
+
+    <section class="card">
+      <form id="uploadForm">
+        <label class="file-label">
+          <input type="file" name="jsonfile" accept=".json" required />
+        </label>
+        <button type="submit">Process File</button>
+      </form>
+      <div id="status"></div>
+      <div id="result" class="result hidden">
+        <div class="grid">
+          <div>
+            <h3>Secret</h3>
+            <pre id="secret"></pre>
+          </div>
+          <div>
+            <h3>Summary</h3>
+            <ul id="summary"></ul>
+          </div>
+        </div>
+
+        <div class="grid">
+          <div>
+            <h3>Wrong Shares</h3>
+            <pre id="wrong"></pre>
+          </div>
+          <div>
+            <h3>Inlier Shares</h3>
+            <pre id="inliers"></pre>
+          </div>
+        </div>
+
+        <h3>Scatter Plot (X = share ID, Y = decoded value)</h3>
+        <canvas id="plot" height="120"></canvas>
+        <p class="note">Note: Values can be huge; chart is for a rough visual only.</p>
+      </div>
+    </section>
+
+    <footer>
+      <small>Built for k-of-n polynomial reconstruction with BigInt precision.</small>
+    </footer>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
