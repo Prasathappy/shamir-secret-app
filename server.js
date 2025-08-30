@@ -9,9 +9,6 @@ const upload = multer({ dest: "uploads/" });
 app.use(express.static("public"));
 app.use(express.json());
 
-/* -------------------- BigInt helpers -------------------- */
-
-// Parse an arbitrary-base string into BigInt (supports up to base 36)
 function parseBigIntFromBase(str, base) {
   const b = BigInt(base);
   let res = 0n;
@@ -32,8 +29,6 @@ function gcdBigInt(a, b) {
   while (b !== 0n) { const t = a % b; a = b; b = t; }
   return a;
 }
-
-/* -------------------- Fraction (BigInt) -------------------- */
 
 class Fraction {
   constructor(num, den = 1n) {
@@ -58,12 +53,6 @@ class Fraction {
   }
 }
 
-/* -------------------- Lagrange interpolation at x=0 -------------------- */
-/**
- * Given k points (x_i, y_i) with BigInt coordinates, compute P(0) exactly:
- * P(0) = sum_{i=1..k} y_i * Π_{j≠i} (-x_j) / (x_i - x_j)
- * Result is a BigInt (for valid SSS-style inputs).
- */
 function interpolateAtZero(points) {
   const k = points.length;
   let acc = new Fraction(0n, 1n);
@@ -72,7 +61,7 @@ function interpolateAtZero(points) {
     const xi = BigInt(points[i][0]);
     const yi = BigInt(points[i][1]);
 
-    let num = new Fraction(yi, 1n); // start with y_i
+    let num = new Fraction(yi, 1n); 
     let den = new Fraction(1n, 1n);
 
     for (let j = 0; j < k; j++) {
@@ -84,23 +73,15 @@ function interpolateAtZero(points) {
       den = den.mul(new Fraction(xi - xj, 1n));
     }
 
-    const term = num.div(den); // y_i * Π(-x_j)/(x_i - x_j)
+    const term = num.div(den); 
     acc = acc.add(term);
   }
 
-  return acc.toBigIntExact(); // should be integer for well-formed inputs
+  return acc.toBigIntExact(); 
 }
 
-/* -------------------- Wrong-share detection -------------------- */
-/**
- * 1) Compute secrets for all C(n,k) subsets; tally the most frequent "majority secret".
- * 2) Pick any one subset that yields the majority secret (consider it an "inlier core").
- * 3) For each remaining share s:
- *      compute secret using s + (k-1) shares from the inlier core.
- *      If it matches majority secret -> valid, else -> wrong.
- */
+
 function combinationsIndices(n, k) {
-  // yields arrays of indices (0..n-1 choose k)
   const result = [];
   const comb = Array.from({ length: k }, (_, i) => i);
   const last = n - 1;
@@ -121,10 +102,9 @@ function detectWrongShares(allPoints, k) {
   const n = allPoints.length;
   if (k > n) throw new Error("k cannot be greater than number of shares");
 
-  // 1) Tally secrets over all k-combinations
   const idxCombos = combinationsIndices(n, k);
   const secretCount = new Map();
-  const subsetBySecret = new Map(); // store one representative subset for each secret
+  const subsetBySecret = new Map(); 
 
   for (const idxs of idxCombos) {
     const subset = idxs.map(i => allPoints[i].slice(0, 2)); // [x,y]
@@ -134,43 +114,36 @@ function detectWrongShares(allPoints, k) {
       secretCount.set(sec, count);
       if (!subsetBySecret.has(sec)) subsetBySecret.set(sec, idxs);
     } catch {
-      // ignore (non-integer or degenerate)
     }
   }
 
   if (secretCount.size === 0) throw new Error("Unable to compute any consistent secret from given shares.");
 
-  // Majority secret
   let majoritySecret = null;
   let maxCount = -1;
   for (const [sec, cnt] of secretCount.entries()) {
     if (cnt > maxCount) { maxCount = cnt; majoritySecret = sec; }
   }
 
-  // 2) Inlier core (one k-subset that yields majority secret)
   const coreIdxs = subsetBySecret.get(majoritySecret);
   const core = coreIdxs.map(i => allPoints[i]);
 
-  // 3) Validate others against core
   const wrong = [];
-  const valid = new Set(coreIdxs); // mark core as valid
+  const valid = new Set(coreIdxs); 
 
   for (let i = 0; i < n; i++) {
     if (valid.has(i)) continue;
-    // build subset: this share + (k-1) from core
     const subset = [[allPoints[i][0], allPoints[i][1]]];
     for (let j = 0; j < core.length && subset.length < k; j++) {
       subset.push([core[j][0], core[j][1]]);
     }
-    // compute secret with this subset
     let sec;
     try { sec = interpolateAtZero(subset).toString(); }
     catch { sec = null; }
     if (sec === majoritySecret) {
-      // it's consistent -> valid
       valid.add(i);
     } else {
-      wrong.push(i); // index
+      wrong.push(i); 
     }
   }
 
@@ -184,7 +157,6 @@ function detectWrongShares(allPoints, k) {
   };
 }
 
-/* -------------------- Route -------------------- */
 
 app.post("/upload", upload.single("jsonfile"), (req, res) => {
   try {
@@ -198,7 +170,6 @@ app.post("/upload", upload.single("jsonfile"), (req, res) => {
       throw new Error("Invalid or missing keys.n / keys.k");
     }
 
-    // Build points: x = numeric key (ID), y = parsed BigInt value
     const points = [];
     for (const [key, val] of Object.entries(data)) {
       if (key === "keys") continue;
@@ -210,19 +181,15 @@ app.post("/upload", upload.single("jsonfile"), (req, res) => {
         throw new Error(`Unsupported base for id ${key}: ${val.base}`);
       }
       const y = parseBigIntFromBase(String(val.value), base);
-      const x = BigInt(key);            // share ID as x
-      points.push([x, y, key]);         // [x, y, "id"]
+      const x = BigInt(key);           
+      points.push([x, y, key]);        
     }
 
     if (points.length !== n) {
-      // allow, but warn—some JSONs might not match exactly
-      // we proceed anyway; detection uses actual points.length
     }
 
-    // Detect wrong shares & get secret
     const { secret, wrongShareIds, inlierShareIds } = detectWrongShares(points, k);
 
-    // Response payload (also return numeric values for plotting)
     const payload = {
       secret,
       totalShares: points.length,
@@ -232,7 +199,6 @@ app.post("/upload", upload.single("jsonfile"), (req, res) => {
       points: points.map(([x, y, id]) => ({ id, x: x.toString(), y: y.toString() }))
     };
 
-    // cleanup uploaded file
     fs.unlink(filePath, () => {});
 
     res.json(payload);
